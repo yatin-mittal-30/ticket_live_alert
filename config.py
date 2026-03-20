@@ -12,6 +12,10 @@ CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "90"))
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "10"))
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
 
+# Slack-only periodic “still running” ping (main.py local loop only; not ticket alerts).
+SLACK_HEARTBEAT_ENABLED = os.getenv("SLACK_HEARTBEAT_ENABLED", "true").lower() == "true"
+SLACK_HEARTBEAT_MINUTES = int(os.getenv("SLACK_HEARTBEAT_MINUTES", "30"))
+
 URLS = {
     "ticket_page": "https://shop.royalchallengers.com/ticket",
     "shop_home": "https://shop.royalchallengers.com/",

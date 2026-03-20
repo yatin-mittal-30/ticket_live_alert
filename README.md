@@ -96,6 +96,8 @@ echo $!   # save this PID to kill later: kill <PID>
 
 **Parallel with GitHub Actions:** safe to run both; when tickets go live you may get **duplicate** Telegram/Slack alerts (one from CI, one from this Mac). That is intentional redundancy while schedules are unreliable.
 
+**Slack heartbeat (local `main.py` only):** every **30 minutes** (configurable) the agent posts a **Slack-only** status message: check count, last scrape OK/fail, uptime, host — so you can confirm it is still running. Set `SLACK_HEARTBEAT_ENABLED=false` in `.env` to turn off. Adjust interval with `SLACK_HEARTBEAT_MINUTES=30`.
+
 ### When the local agent stops or “drops”
 
 | Situation | What happens |

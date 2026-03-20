@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import socket
+from datetime import datetime, timezone
 
 import config
 from detector import DetectionResult
@@ -107,6 +109,66 @@ def send_slack_alert(result: DetectionResult) -> bool:
 
     except Exception as e:
         logger.error("Slack alert failed: %s", e)
+        return False
+
+
+def send_slack_heartbeat(
+    *,
+    check_count: int,
+    last_scrape_ok: bool,
+    last_summary: str,
+    started_at_utc: datetime,
+) -> bool:
+    """Slack-only status ping so you can confirm the local agent is still running."""
+    if not config.SLACK_HEARTBEAT_ENABLED:
+        return False
+    if not config.SLACK_BOT_TOKEN or not config.SLACK_CHANNEL_ID:
+        return False
+
+    try:
+        from slack_sdk import WebClient
+
+        now = datetime.now(timezone.utc)
+        start = started_at_utc
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        else:
+            start = start.astimezone(timezone.utc)
+        uptime = now - start
+        hours, rem = divmod(int(uptime.total_seconds()), 3600)
+        mins, secs = divmod(rem, 60)
+        uptime_s = f"{hours}h {mins}m {secs}s"
+
+        scrape_line = "Last scrape: *OK*" if last_scrape_ok else "Last scrape: *FAILED*"
+        summary = (last_summary or "").strip()
+        if len(summary) > 400:
+            summary = summary[:397] + "..."
+
+        host = socket.gethostname()
+        text = (
+            f":white_check_mark: *RCB agent heartbeat* — still running\n"
+            f"• Checks completed: *{check_count}*\n"
+            f"• {scrape_line}\n"
+            f"• Uptime: `{uptime_s}` (host: `{host}`)\n"
+            f"• Last status: _{summary or 'n/a'}_"
+        )
+
+        client = WebClient(token=config.SLACK_BOT_TOKEN)
+        client.chat_postMessage(
+            channel=config.SLACK_CHANNEL_ID,
+            text=f"RCB agent OK — check #{check_count}, uptime {uptime_s}",
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": text},
+                },
+            ],
+        )
+        logger.info("Slack heartbeat sent (check #%d)", check_count)
+        return True
+
+    except Exception as e:
+        logger.error("Slack heartbeat failed: %s", e)
         return False
 
 

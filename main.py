@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import config
 from scraper import RCBScraper
 from detector import TicketDetector
-from notifier import send_alerts
+from notifier import send_alerts, send_slack_heartbeat
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -55,12 +55,23 @@ class RCBTicketAgent:
         self._running = False
         self._check_count = 0
         self._last_alert_time: datetime | None = None
+        self._process_started_at: datetime | None = None
+        self._last_slack_heartbeat_at: datetime | None = None
+        self._heartbeat_last_scrape_ok: bool = True
+        self._heartbeat_last_summary: str = "(no check yet)"
 
     async def start(self):
         logger.info("=" * 60)
         logger.info("RCB Ticket Alert Agent starting")
         logger.info("Check interval: %ds", config.CHECK_INTERVAL_SECONDS)
         logger.info("Alert cooldown: %d min", config.ALERT_COOLDOWN_MINUTES)
+        if config.SLACK_HEARTBEAT_ENABLED and config.SLACK_BOT_TOKEN and config.SLACK_CHANNEL_ID:
+            logger.info(
+                "Slack heartbeat: every %d min (Slack only)",
+                config.SLACK_HEARTBEAT_MINUTES,
+            )
+        elif config.SLACK_HEARTBEAT_ENABLED:
+            logger.info("Slack heartbeat enabled but Slack not configured; heartbeats skipped")
         logger.info("Monitoring URLs:")
         for name, url in config.URLS.items():
             logger.info("  [%s] %s", name, url)
@@ -71,10 +82,13 @@ class RCBTicketAgent:
 
         await self.scraper.start()
         self._running = True
+        self._process_started_at = datetime.now(timezone.utc)
+        self._last_slack_heartbeat_at = None
 
         try:
             while self._running:
                 await self._run_check()
+                await self._maybe_send_slack_heartbeat()
                 jitter = random.randint(0, 10)
                 sleep_time = config.CHECK_INTERVAL_SECONDS + jitter
                 logger.info("Next check in %ds...", sleep_time)
@@ -87,6 +101,35 @@ class RCBTicketAgent:
 
     def stop(self):
         self._running = False
+
+    async def _maybe_send_slack_heartbeat(self) -> None:
+        if not config.SLACK_HEARTBEAT_ENABLED:
+            return
+        if not config.SLACK_BOT_TOKEN or not config.SLACK_CHANNEL_ID:
+            return
+        if self._process_started_at is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        interval = timedelta(minutes=config.SLACK_HEARTBEAT_MINUTES)
+
+        if self._last_slack_heartbeat_at is None:
+            due = self._process_started_at + interval
+            if now < due:
+                return
+        else:
+            if now < self._last_slack_heartbeat_at + interval:
+                return
+
+        ok = await asyncio.to_thread(
+            send_slack_heartbeat,
+            check_count=self._check_count,
+            last_scrape_ok=self._heartbeat_last_scrape_ok,
+            last_summary=self._heartbeat_last_summary,
+            started_at_utc=self._process_started_at,
+        )
+        if ok:
+            self._last_slack_heartbeat_at = now
 
     def _append_check_jsonl(self, record: dict) -> None:
         path = os.path.join(LOG_DIR, "checks.jsonl")
@@ -118,6 +161,8 @@ class RCBTicketAgent:
 
         scrape_ok = bool(results and any(r.success for r in results))
         if not scrape_ok:
+            self._heartbeat_last_scrape_ok = False
+            self._heartbeat_last_summary = str(last_error) if last_error else "scrape failed"
             logger.error("All %d scrape attempts failed. Last error: %s", config.MAX_RETRIES, last_error)
             self._append_check_jsonl({
                 "ts_utc": now.isoformat(),
@@ -129,6 +174,8 @@ class RCBTicketAgent:
             return
 
         detection = self.detector.analyze(results)
+        self._heartbeat_last_scrape_ok = True
+        self._heartbeat_last_summary = detection.summary
         logger.info("Detection: %s", detection.summary)
 
         alerted = False
