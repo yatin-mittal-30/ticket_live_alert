@@ -1,9 +1,14 @@
+import asyncio
 import logging
 
 import config
 from detector import DetectionResult
 
 logger = logging.getLogger(__name__)
+
+
+ALERT_REPEAT_COUNT = 3
+ALERT_REPEAT_INTERVAL_SECONDS = 10
 
 
 async def send_telegram_alert(result: DetectionResult) -> bool:
@@ -17,6 +22,7 @@ async def send_telegram_alert(result: DetectionResult) -> bool:
         bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
 
         message = _format_telegram_message(result)
+
         await bot.send_message(
             chat_id=config.TELEGRAM_CHAT_ID,
             text=message,
@@ -32,6 +38,20 @@ async def send_telegram_alert(result: DetectionResult) -> bool:
                     caption="RCB Ticket Page Screenshot",
                 )
             logger.info("Telegram screenshot sent")
+
+        for i in range(ALERT_REPEAT_COUNT - 1):
+            await asyncio.sleep(ALERT_REPEAT_INTERVAL_SECONDS)
+            matches_text = ", ".join(result.new_matches) if result.new_matches else "New tickets"
+            await bot.send_message(
+                chat_id=config.TELEGRAM_CHAT_ID,
+                text=(
+                    f"🚨🚨🚨 REMINDER {i + 2}/{ALERT_REPEAT_COUNT} 🚨🚨🚨\n\n"
+                    f"<b>{matches_text} -- TICKETS ARE LIVE!</b>\n\n"
+                    f"🔗 <a href='https://shop.royalchallengers.com/ticket'>BOOK NOW</a>"
+                ),
+                parse_mode="HTML",
+            )
+            logger.info("Telegram reminder %d/%d sent", i + 2, ALERT_REPEAT_COUNT)
 
         return True
 
