@@ -1,0 +1,12 @@
+app = "rcb-ticket-alert"
+primary_region = "bom"
+
+[build]
+
+[vm]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[processes]
+  app = "python main.py"

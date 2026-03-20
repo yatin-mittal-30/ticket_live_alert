@@ -1,0 +1,11 @@
+.git
+.venv
+screenshots/
+*.log
+.env
+__pycache__
+.dockerignore
+Dockerfile
+fly.toml
+.env.example
+README.md
