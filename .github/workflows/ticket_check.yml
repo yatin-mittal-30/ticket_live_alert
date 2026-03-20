@@ -1,9 +1,13 @@
 name: RCB Ticket Check
 
+# Cron runs in UTC. Offset minutes reduce load at :00/:05 and help scheduling reliability.
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check-tickets:
