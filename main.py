@@ -80,24 +80,47 @@ class RCBTicketAgent:
             logger.info("  RCB vs %s (%s) - %s", m["opponent"], m["full_name"], m["date"])
         logger.info("=" * 60)
 
-        await self.scraper.start()
         self._running = True
         self._process_started_at = datetime.now(timezone.utc)
         self._last_slack_heartbeat_at = None
+        self._consecutive_failures = 0
+
+        while self._running:
+            try:
+                await self.scraper.start()
+                self._consecutive_failures = 0
+
+                while self._running:
+                    await self._run_check()
+                    await self._maybe_send_slack_heartbeat()
+                    jitter = random.randint(0, 10)
+                    sleep_time = config.CHECK_INTERVAL_SECONDS + jitter
+                    logger.info("Next check in %ds...", sleep_time)
+                    await asyncio.sleep(sleep_time)
+
+            except asyncio.CancelledError:
+                logger.info("Agent loop cancelled")
+                break
+
+            except Exception as e:
+                self._consecutive_failures += 1
+                backoff = min(30 * self._consecutive_failures, 300)
+                logger.error(
+                    "Agent loop crashed (failure #%d): %s. "
+                    "Restarting browser in %ds...",
+                    self._consecutive_failures, e, backoff,
+                )
+                try:
+                    await self.scraper.stop()
+                except Exception:
+                    pass
+                await asyncio.sleep(backoff)
 
         try:
-            while self._running:
-                await self._run_check()
-                await self._maybe_send_slack_heartbeat()
-                jitter = random.randint(0, 10)
-                sleep_time = config.CHECK_INTERVAL_SECONDS + jitter
-                logger.info("Next check in %ds...", sleep_time)
-                await asyncio.sleep(sleep_time)
-        except asyncio.CancelledError:
-            logger.info("Agent loop cancelled")
-        finally:
             await self.scraper.stop()
-            logger.info("Agent stopped")
+        except Exception:
+            pass
+        logger.info("Agent stopped")
 
     def stop(self):
         self._running = False
@@ -144,6 +167,19 @@ class RCBTicketAgent:
         self._check_count += 1
         now = datetime.now(timezone.utc)
         logger.info("--- Check #%d at %s ---", self._check_count, datetime.now().strftime("%H:%M:%S"))
+
+        if not await self._wait_for_internet():
+            self._heartbeat_last_scrape_ok = False
+            self._heartbeat_last_summary = "internet unreachable"
+            logger.error("Internet still down after waiting, skipping check #%d", self._check_count)
+            self._append_check_jsonl({
+                "ts_utc": now.isoformat(),
+                "check": self._check_count,
+                "scrape_ok": False,
+                "tickets_found": False,
+                "summary": "internet unreachable",
+            })
+            return
 
         results = None
         last_error = None
@@ -206,6 +242,33 @@ class RCBTicketAgent:
             "new_matches": detection.new_matches,
             "summary": detection.summary[:500] if detection.summary else "",
         })
+
+    @staticmethod
+    async def _wait_for_internet(max_wait: int = 900, probe_interval: int = 15) -> bool:
+        """Wait up to max_wait seconds for internet connectivity. Returns True if online."""
+        import socket as _socket
+
+        def _probe() -> bool:
+            try:
+                _socket.create_connection(("8.8.8.8", 53), timeout=5).close()
+                return True
+            except OSError:
+                return False
+
+        if await asyncio.to_thread(_probe):
+            return True
+
+        logger.warning("Internet appears down, waiting up to %ds for it to return...", max_wait)
+        waited = 0
+        while waited < max_wait:
+            await asyncio.sleep(probe_interval)
+            waited += probe_interval
+            if await asyncio.to_thread(_probe):
+                logger.info("Internet is back after ~%ds", waited)
+                return True
+            logger.debug("Still offline after %ds...", waited)
+
+        return False
 
     def _is_in_cooldown(self) -> bool:
         if not self._last_alert_time:
