@@ -30,6 +30,9 @@ if [[ ! -d .venv ]]; then
   exit 1
 fi
 
+# Let the display sleep/dim at night while the Mac stays awake (plugged in + Battery settings).
+export ALLOW_DISPLAY_SLEEP="${ALLOW_DISPLAY_SLEEP:-1}"
+
 nohup "$ROOT/run_local_stay_awake.sh" >>"$OUT_LOG" 2>&1 &
 echo $! >"$PID_FILE"
 

@@ -23,10 +23,20 @@ fi
 source .venv/bin/activate
 export HEADLESS="${HEADLESS:-true}"
 
-echo "Starting RCB agent with caffeinate (idle sleep blocked while this runs)."
-echo "Project: $ROOT — logs: agent.log"
+echo "Starting RCB agent with caffeinate (system idle sleep blocked while this runs)."
+echo "Project: $ROOT — logs: logs/agent.log"
 echo "Plug in power; keep lid open unless using clamshell + monitor + power. Ctrl+C to stop."
+if [[ "${ALLOW_DISPLAY_SLEEP:-0}" == "1" ]]; then
+  echo "ALLOW_DISPLAY_SLEEP=1 → screen may turn off; Mac stays awake (needs power + Battery settings)."
+else
+  echo "Tip: overnight with lights off → ALLOW_DISPLAY_SLEEP=1 ./run_local_stay_awake.sh"
+fi
 echo ""
 
-# -i idle sleep  -d display sleep  -m disk sleep  -s sleep on AC (when on adapter)  -u user active
-exec caffeinate -dimsu python main.py
+# -i system idle sleep  -d block DISPLAY sleep (omit if ALLOW_DISPLAY_SLEEP=1)
+# -m disk idle sleep  -s system sleep on AC  -u user active
+if [[ "${ALLOW_DISPLAY_SLEEP:-0}" == "1" ]]; then
+  exec caffeinate -imsu python main.py
+else
+  exec caffeinate -dimsu python main.py
+fi

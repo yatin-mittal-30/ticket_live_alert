@@ -11,6 +11,22 @@ Use this when the laptop stays at home **plugged in** and you want `main.py` to 
 | **Lid closed** + external display + power (**clamshell**) | Usually stays awake; verify in **Battery** settings. |
 | **Battery only** | Can sleep sooner; **plug in** for the next two days. |
 
+## Display off at night vs “Mac off”
+
+**These are different:**
+
+| What you do | Agent keeps running? |
+|-------------|----------------------|
+| **Display turns off** / screen is black (Mac still awake on power) | **Yes** — if the computer did **not** sleep. |
+| **Sleep** (Apple menu → Sleep, or lid closed without clamshell, or some power-button flows) | **No** — networking pauses until wake. |
+| **Shut down** or **Restart** | **No** |
+
+**Power button (MacBook):** A **short** press usually does **not** “turn off the light” safely—it may open the **Sleep / Restart / Shut Down** dialog. **Do not choose Sleep or Shut Down** if you want the agent to run. **Long-press** forces power off → agent **dies**. Safer at night: **plug in**, use **Lock Screen** ( menu or **Control + Command + Q**), and let the **display sleep** on a timer while **“prevent sleeping on power adapter when display is off”** is on (see below).
+
+**Our scripts:** `start_local_daemon.sh` sets **`ALLOW_DISPLAY_SLEEP=1`** so `caffeinate` does **not** force the screen to stay on—the **screen can go black** while the **CPU stays up** (still requires power + Battery settings). Foreground `./run_local_stay_awake.sh` defaults to keeping the display awake unless you run `ALLOW_DISPLAY_SLEEP=1 ./run_local_stay_awake.sh`.
+
+**After changing `run_local_stay_awake.sh`:** restart the daemon (`./stop_local_daemon.sh` then `./start_local_daemon.sh`) so the new display behavior applies.
+
 ## 1) Use the stay-awake launcher (foreground)
 
 From the project folder:
