@@ -62,11 +62,19 @@ playwright install chromium
 
 Or: `source .venv/bin/activate && python main.py`
 
+**Keep the Mac awake while the agent runs** (next ~48h at home, **plugged in**, lid open or clamshell + monitor):
+
+```bash
+./run_local_stay_awake.sh
+```
+
+Uses macOS `caffeinate` so **idle sleep is blocked** for as long as this process runs. Full checklist: [MAC_STAY_AWAKE.md](MAC_STAY_AWAKE.md).
+
 **Keep running after you close Terminal** (still stops if the Mac sleeps — see below):
 
 ```bash
 cd /path/to/ticket_booking_agent
-nohup ./run_local.sh >> agent_nohup.log 2>&1 &
+nohup ./run_local_stay_awake.sh >> agent_nohup.log 2>&1 &
 echo $!   # save this PID to kill later: kill <PID>
 ```
 
