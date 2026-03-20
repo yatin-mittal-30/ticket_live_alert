@@ -208,7 +208,12 @@ def _format_telegram_message(result: DetectionResult) -> str:
 
 
 def _format_slack_message(result: DetectionResult) -> str:
+    tag = f"<@{config.SLACK_USER_ID}>" if config.SLACK_USER_ID else ""
+
     lines = []
+    if tag:
+        lines.append(f"{tag} :rotating_light: TICKETS ARE LIVE!")
+        lines.append("")
 
     if result.new_matches:
         lines.append("*New matches available:*")
