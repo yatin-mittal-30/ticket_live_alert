@@ -13,11 +13,14 @@ jobs:
   check-tickets:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    env:
+      # Opt into Node 24 for JS-based actions until it is default (see GitHub changelog 2025-09-19).
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
