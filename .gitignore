@@ -1,6 +1,9 @@
 .env
 screenshots/
 agent.log
+logs/*
+!logs/.gitkeep
+.agent.pid
 __pycache__/
 *.pyc
 .venv/

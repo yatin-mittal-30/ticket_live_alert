@@ -70,6 +70,22 @@ Or: `source .venv/bin/activate && python main.py`
 
 Uses macOS `caffeinate` so **idle sleep is blocked** for as long as this process runs. Full checklist: [MAC_STAY_AWAKE.md](MAC_STAY_AWAKE.md).
 
+**Background daemon + logs** (recommended for 24–48h; survives closing Terminal):
+
+```bash
+./start_local_daemon.sh          # start (uses caffeinate + nohup)
+./status_local_daemon.sh         # running? tail of log
+./stop_local_daemon.sh           # stop
+```
+
+Logs (not committed to git):
+
+| File | What |
+|------|------|
+| `logs/agent.log` | Full log; **rotates daily**, keeps **14** days |
+| `logs/checks.jsonl` | **One JSON line per check** (timestamp, scrape_ok, tickets_found, summary) |
+| `logs/daemon.out` | Stdout/stderr from the shell wrapper |
+
 **Keep running after you close Terminal** (still stops if the Mac sleeps — see below):
 
 ```bash
@@ -119,10 +135,15 @@ Alerts fire only when **new matches** appear, so you won't get spammed about mat
 ## File Structure
 
 ```
-main.py          — Entry point, scheduler loop
-scraper.py       — Playwright browser automation
-detector.py      — Ticket detection logic
-notifier.py      — Telegram + Slack alert senders
-config.py        — Configuration and env loading
-.env.example     — Environment variable template
+main.py                  — Entry point, scheduler loop
+run_local_stay_awake.sh  — Foreground + caffeinate
+start_local_daemon.sh    — Background (nohup + .agent.pid)
+stop_local_daemon.sh     / status_local_daemon.sh
+logs/agent.log           — Daily rotating log (runtime)
+logs/checks.jsonl        — One JSON line per check (runtime)
+scraper.py               — Playwright browser automation
+detector.py              — Ticket detection logic
+notifier.py              — Telegram + Slack alert senders
+config.py                — Configuration and env loading
+.env.example             — Environment variable template
 ```

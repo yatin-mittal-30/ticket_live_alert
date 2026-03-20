@@ -11,7 +11,7 @@ Use this when the laptop stays at home **plugged in** and you want `main.py` to 
 | **Lid closed** + external display + power (**clamshell**) | Usually stays awake; verify in **Battery** settings. |
 | **Battery only** | Can sleep sooner; **plug in** for the next two days. |
 
-## 1) Use the stay-awake launcher (recommended)
+## 1) Use the stay-awake launcher (foreground)
 
 From the project folder:
 
@@ -22,12 +22,26 @@ chmod +x run_local_stay_awake.sh   # once
 
 This wraps the agent in `caffeinate` so **idle sleep is blocked while the process runs**. When you stop the script (Ctrl+C), normal sleep rules return.
 
-**Background + stay awake** (Terminal can be closed; process still tied to login session):
+## 1b) Daemon (background + logs) — best for 24–48h
+
+Starts `caffeinate` + agent under `nohup`, writes **PID** to `.agent.pid`, logs to `logs/`:
 
 ```bash
 cd /path/to/ticket_booking_agent
-nohup ./run_local_stay_awake.sh >> agent_nohup.log 2>&1 &
-echo $!    # PID — stop later: kill PID
+./start_local_daemon.sh
+./status_local_daemon.sh    # is it running?
+./stop_local_daemon.sh      # when finished
+```
+
+- `logs/agent.log` — full text log, **daily rotation**, 14 days kept  
+- `logs/checks.jsonl` — **one JSON object per check**  
+- `logs/daemon.out` — shell-level output  
+
+**Manual alternative** (no PID file helpers):
+
+```bash
+nohup ./run_local_stay_awake.sh >> logs/daemon.out 2>&1 &
+echo $!   # stop later: kill PID
 ```
 
 ## 2) macOS System Settings (while on power adapter)
