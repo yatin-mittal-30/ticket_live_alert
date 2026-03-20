@@ -28,11 +28,9 @@ playwright install chromium
 4. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in a browser
 5. Find `"chat":{"id": 123456789}` in the response — that's your **chat ID**
 
-### 3. Create a Slack Incoming Webhook
+### 3. Slack bot (not webhook)
 
-1. Go to [Slack API: Incoming Webhooks](https://api.slack.com/messaging/webhooks)
-2. Create a new webhook for your workspace and channel
-3. Copy the **webhook URL**
+Create a Slack app with a **Bot User OAuth Token** (`xoxb-...`) and invite the bot to your channel. Put the token and channel ID in `.env` (see `.env.example`).
 
 ### 4. Configure environment
 
@@ -45,15 +43,52 @@ Edit `.env` and fill in your values:
 ```
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_CHAT_ID=123456789
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/T.../B.../xxx
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C0XXXXXXXXX
 CHECK_INTERVAL_SECONDS=90
 ```
 
-### 5. Run the agent
+### 5. Run the agent locally
+
+**One-time (foreground — stops if you close the terminal):**
 
 ```bash
-python main.py
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+playwright install chromium
+./run_local.sh
 ```
+
+Or: `source .venv/bin/activate && python main.py`
+
+**Keep running after you close Terminal** (still stops if the Mac sleeps — see below):
+
+```bash
+cd /path/to/ticket_booking_agent
+nohup ./run_local.sh >> agent_nohup.log 2>&1 &
+echo $!   # save this PID to kill later: kill <PID>
+```
+
+**Parallel with GitHub Actions:** safe to run both; when tickets go live you may get **duplicate** Telegram/Slack alerts (one from CI, one from this Mac). That is intentional redundancy while schedules are unreliable.
+
+### When the local agent stops or “drops”
+
+| Situation | What happens |
+|-----------|----------------|
+| **Close Terminal** (no `nohup`/`tmux`) | Process gets **SIGHUP** and exits |
+| **Ctrl+C** in that terminal | **SIGINT** → graceful stop after current sleep/check |
+| **Mac sleeps** (lid closed, Energy Saver) | Networking and scheduling pause; checks **do not run** until wake |
+| **Logout / restart / shutdown** | Process **dies** |
+| **Kill Terminal app / Force Quit** | Process **dies** |
+| **`kill <pid>`** (default TERM) | **SIGTERM** → same as Ctrl+C path |
+| **Wi‑Fi / internet down** | Scrapes fail; agent **logs errors and keeps going** after retries |
+| **Playwright / Chromium crash** | Usually caught per-check; loop **continues** next interval |
+| **Uncaught Python exception** | Process **exits** (rare if deps OK) |
+| **Out of memory** | macOS may **kill** the process |
+| **Battery dies / hard power off** | Process **dies** |
+
+**Tip:** In **System Settings → Battery → Options**, disable or relax **“Put hard disks to sleep”** / use **“Prevent automatic sleeping when display is off”** on power adapter if you want fewer gaps while plugged in (still not as reliable as cloud).
 
 The agent will:
 - Check the ticket page every ~90 seconds
