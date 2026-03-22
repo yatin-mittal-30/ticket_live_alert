@@ -7,7 +7,17 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN", "")
 SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID", "")
-SLACK_USER_ID = os.getenv("SLACK_USER_ID", "U059LSX2PV1")
+
+# Comma-separated Slack user IDs @mentioned on ticket alerts only (not heartbeats).
+_notify_raw = os.getenv("SLACK_NOTIFY_USER_IDS", "").strip()
+if _notify_raw:
+    SLACK_NOTIFY_USER_IDS = [x.strip() for x in _notify_raw.split(",") if x.strip()]
+else:
+    _legacy = os.getenv("SLACK_USER_ID", "").strip()
+    if _legacy:
+        SLACK_NOTIFY_USER_IDS = [_legacy]
+    else:
+        SLACK_NOTIFY_USER_IDS = ["U059LSX2PV1", "U059J2TDZNZ"]
 
 CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "90"))
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "10"))

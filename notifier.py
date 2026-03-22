@@ -208,11 +208,11 @@ def _format_telegram_message(result: DetectionResult) -> str:
 
 
 def _format_slack_message(result: DetectionResult) -> str:
-    tag = f"<@{config.SLACK_USER_ID}>" if config.SLACK_USER_ID else ""
+    tags = " ".join(f"<@{uid}>" for uid in config.SLACK_NOTIFY_USER_IDS)
 
     lines = []
-    if tag:
-        lines.append(f"{tag} :rotating_light: TICKETS ARE LIVE!")
+    if tags:
+        lines.append(f"{tags} :rotating_light: TICKETS ARE LIVE!")
         lines.append("")
 
     if result.new_matches:
