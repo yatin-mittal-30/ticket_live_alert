@@ -2,7 +2,7 @@
 Single-run ticket checker for GitHub Actions.
 
 Performs multiple check rounds with intervals, then exits.
-Usage: python check_once.py --rounds 3 --interval 90
+Usage: python check_once.py --rounds 3 --interval 45
 """
 
 import argparse
@@ -76,7 +76,7 @@ async def run(rounds: int, interval: int):
 def main():
     parser = argparse.ArgumentParser(description="RCB Ticket Checker (single run)")
     parser.add_argument("--rounds", type=int, default=3, help="Number of check rounds")
-    parser.add_argument("--interval", type=int, default=90, help="Seconds between rounds")
+    parser.add_argument("--interval", type=int, default=45, help="Seconds between rounds")
     args = parser.parse_args()
 
     asyncio.run(run(args.rounds, args.interval))

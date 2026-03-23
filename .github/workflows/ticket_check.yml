@@ -36,4 +36,4 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           HEADLESS: "true"
-        run: python check_once.py --rounds 3 --interval 90
+        run: python check_once.py --rounds 3 --interval 45
