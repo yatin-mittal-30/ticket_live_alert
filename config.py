@@ -19,7 +19,7 @@ else:
     else:
         SLACK_NOTIFY_USER_IDS = ["U059LSX2PV1", "U059J2TDZNZ"]
 
-CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "90"))
+CHECK_INTERVAL_SECONDS = int(os.getenv("CHECK_INTERVAL_SECONDS", "45"))
 ALERT_COOLDOWN_MINUTES = int(os.getenv("ALERT_COOLDOWN_MINUTES", "10"))
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
 
@@ -29,9 +29,16 @@ SLACK_HEARTBEAT_MINUTES = int(os.getenv("SLACK_HEARTBEAT_MINUTES", "30"))
 
 URLS = {
     "ticket_page": "https://shop.royalchallengers.com/ticket",
+    "tickets_page": "https://shop.royalchallengers.com/tickets",
     "shop_home": "https://shop.royalchallengers.com/",
     "fixtures": "https://royalchallengers.com/fixtures",
 }
+
+# Book-now links in Slack/Telegram (both /ticket and /tickets are monitored above).
+PRIMARY_TICKET_SHOP_URL = os.getenv(
+    "PRIMARY_TICKET_SHOP_URL",
+    "https://shop.royalchallengers.com/tickets",
+)
 
 TARGET_MATCHES = [
     {"opponent": "SRH", "full_name": "Sunrisers Hyderabad", "date": "March 28, 2026"},
@@ -47,6 +54,11 @@ MATCH_KEYWORDS = [
 TICKET_ACTION_KEYWORDS = [
     "buy now", "book now", "add to cart", "select seat",
     "book ticket", "get ticket", "buy ticket",
+]
+
+# Shop page: button / visible text hints (lowercase) for ticket CTAs.
+SHOP_TICKET_BUTTON_HINTS = [
+    "ticket", "tickets", "buy ticket", "book ticket", "get ticket", "match tickets",
 ]
 
 TICKET_SIGNAL_KEYWORDS = [

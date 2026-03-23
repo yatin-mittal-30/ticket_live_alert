@@ -1,6 +1,8 @@
 # RCB Ticket Alert Agent
 
-Monitors the [RCB ticket shop](https://shop.royalchallengers.com/ticket) and sends instant alerts via **Telegram** and **Slack** when match tickets go live.
+Monitors **both** [`/ticket`](https://shop.royalchallengers.com/ticket) and [`/tickets`](https://shop.royalchallengers.com/tickets), the [shop home](https://shop.royalchallengers.com/) (nav links, ticket URLs, and ticket-related **buttons**), and [fixtures](https://royalchallengers.com/fixtures). Sends **Telegram** + **Slack** when tickets look live.
+
+Alert links use `PRIMARY_TICKET_SHOP_URL` (default `/tickets`); override in `.env` if needed.
 
 ## Current Target Matches
 
@@ -45,7 +47,7 @@ TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 TELEGRAM_CHAT_ID=123456789
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_CHANNEL_ID=C0XXXXXXXXX
-CHECK_INTERVAL_SECONDS=90
+CHECK_INTERVAL_SECONDS=45
 ```
 
 ### 5. Run the agent locally
@@ -117,7 +119,7 @@ echo $!   # save this PID to kill later: kill <PID>
 **Tip:** In **System Settings → Battery → Options**, disable or relax **“Put hard disks to sleep”** / use **“Prevent automatic sleeping when display is off”** on power adapter if you want fewer gaps while plugged in (still not as reliable as cloud).
 
 The agent will:
-- Check the ticket page every ~90 seconds
+- Check the tickets page every ~45 seconds (plus small jitter)
 - Log every check to console and `agent.log`
 - Save screenshots to `screenshots/`
 - Send Telegram + Slack alerts when tickets are detected

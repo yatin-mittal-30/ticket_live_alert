@@ -49,7 +49,7 @@ async def send_telegram_alert(result: DetectionResult) -> bool:
                 text=(
                     f"🚨🚨🚨 REMINDER {i + 2}/{ALERT_REPEAT_COUNT} 🚨🚨🚨\n\n"
                     f"<b>{matches_text} -- TICKETS ARE LIVE!</b>\n\n"
-                    f"🔗 <a href='https://shop.royalchallengers.com/ticket'>BOOK NOW</a>"
+                    f"🔗 <a href='{config.PRIMARY_TICKET_SHOP_URL}'>BOOK NOW</a>"
                 ),
                 parse_mode="HTML",
             )
@@ -97,7 +97,7 @@ def send_slack_alert(result: DetectionResult) -> bool:
                         {
                             "type": "button",
                             "text": {"type": "plain_text", "text": "🎟️ Book Now"},
-                            "url": "https://shop.royalchallengers.com/ticket",
+                            "url": config.PRIMARY_TICKET_SHOP_URL,
                             "style": "primary",
                         }
                     ],
@@ -227,7 +227,7 @@ def _format_slack_message(result: DetectionResult) -> str:
 
     lines.extend([
         "",
-        f":link: <https://shop.royalchallengers.com/ticket|Open Ticket Page>",
+        f":link: <{config.PRIMARY_TICKET_SHOP_URL}|Open tickets page>",
         f":bar_chart: Page content: {result.content_length} chars (was {result.baseline_length})",
         "",
         ":zap: *GO BOOK NOW before they sell out!*",

@@ -1,10 +1,22 @@
 import logging
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 from scraper import ScrapeResult
 import config
 
 logger = logging.getLogger(__name__)
+
+
+def _is_rcb_ticket_listing_url(url: str) -> bool:
+    path = (urlparse(url).path or "").lower().rstrip("/")
+    return path.endswith("/ticket") or path.endswith("/tickets")
+
+
+def _is_shop_home_url(url: str) -> bool:
+    return (
+        url.rstrip("/") == config.URLS["shop_home"].rstrip("/")
+    )
 
 
 @dataclass
@@ -51,14 +63,16 @@ class TicketDetector:
         self._ticket_page_baseline: int | None = None
 
     def analyze(self, results: list[ScrapeResult]) -> DetectionResult:
-        ticket_page = next((r for r in results if "ticket" in r.url and r.success), None)
-        shop_home = next((r for r in results if r.url.rstrip("/").endswith(".com") and r.success), None)
-        fixtures_page = next((r for r in results if "fixtures" in r.url and r.success), None)
+        ticket_pages = [r for r in results if r.success and _is_rcb_ticket_listing_url(r.url)]
+        shop_home = next((r for r in results if r.success and _is_shop_home_url(r.url)), None)
+        fixtures_page = next((r for r in results if r.success and "fixtures" in r.url), None)
 
         signals = _Signals()
 
-        if ticket_page:
-            self._analyze_ticket_page(ticket_page, signals)
+        if ticket_pages:
+            self._analyze_ticket_pages(ticket_pages, signals)
+        elif self._ticket_page_baseline is not None:
+            signals.ticket_page_baseline = self._ticket_page_baseline
 
         if shop_home:
             self._analyze_shop_home(shop_home, signals)
@@ -66,40 +80,58 @@ class TicketDetector:
         if fixtures_page:
             self._analyze_fixtures_page(fixtures_page, signals)
 
-        return self._make_decision(signals, ticket_page)
+        primary = ticket_pages[0] if ticket_pages else None
+        return self._make_decision(signals, primary)
 
-    def _analyze_ticket_page(self, result: ScrapeResult, signals: _Signals):
-        """The primary signal source. If this page has ticket content, that's the strongest indicator."""
-        text = result.page_text.strip()
-        text_lower = text.lower()
-        content_length = len(text)
+    def _analyze_ticket_pages(self, pages: list[ScrapeResult], signals: _Signals):
+        """Merge /ticket and /tickets listing pages: combined length baseline and shared signals."""
+        total_len = sum(len(r.page_text.strip()) for r in pages)
 
         if self._ticket_page_baseline is None:
-            self._ticket_page_baseline = content_length
-            logger.info("Ticket page baseline: %d chars", self._ticket_page_baseline)
+            self._ticket_page_baseline = total_len
+            logger.info(
+                "Ticket pages combined baseline (/ticket + /tickets): %d chars",
+                total_len,
+            )
 
-        signals.ticket_page_length = content_length
+        signals.ticket_page_length = total_len
         signals.ticket_page_baseline = self._ticket_page_baseline
-        signals.screenshot_path = result.screenshot_path
-        signals.url = result.url
+        signals.ticket_page_grew = total_len > (self._ticket_page_baseline + 200)
 
-        content_grew = content_length > (self._ticket_page_baseline + 200)
-        signals.ticket_page_grew = content_grew
+        shot = next((r for r in pages if "/tickets" in r.url.lower() and r.screenshot_path), None)
+        if not shot:
+            shot = next((r for r in pages if r.screenshot_path), None)
+        if shot:
+            signals.screenshot_path = shot.screenshot_path
+        signals.url = config.PRIMARY_TICKET_SHOP_URL
 
-        signals.match_keywords.extend(self._find_match_keywords(text_lower))
-        signals.action_keywords.extend(self._find_keywords(text_lower, config.TICKET_ACTION_KEYWORDS))
-        signals.signal_keywords.extend(self._find_keywords(text_lower, config.TICKET_SIGNAL_KEYWORDS))
-        signals.ticket_links.extend(self._find_ticket_links(result.links))
+        for result in pages:
+            text_lower = result.page_text.strip().lower()
+            signals.match_keywords.extend(self._find_match_keywords(text_lower))
+            signals.action_keywords.extend(self._find_keywords(text_lower, config.TICKET_ACTION_KEYWORDS))
+            signals.signal_keywords.extend(self._find_keywords(text_lower, config.TICKET_SIGNAL_KEYWORDS))
+            signals.ticket_links.extend(self._find_ticket_links(result.links))
 
     def _analyze_shop_home(self, result: ScrapeResult, signals: _Signals):
-        """Check if shop homepage now has a visible 'Tickets' nav link or banner."""
+        """Nav links, ticket hrefs on shop, and visible buttons that look like ticket CTAs."""
         for link in result.links:
             href = link["href"].lower()
             text = link["text"].lower().strip()
+            if self._is_false_positive_link(href):
+                continue
             if "ticket" in text and not self._is_false_positive_link(href):
                 signals.shop_has_ticket_nav = True
                 signals.ticket_links.append(f"nav: {link['text']} ({link['href']})")
-                break
+            if "ticket" in href and "shop.royalchallengers.com" in href:
+                signals.shop_has_ticket_nav = True
+                signals.ticket_links.append(f"shop-link: {link['text'][:40]} ({link['href'][:90]})")
+
+        for btn in result.buttons:
+            low = btn.lower()
+            if not any(h in low for h in config.SHOP_TICKET_BUTTON_HINTS):
+                continue
+            signals.shop_has_ticket_nav = True
+            signals.ticket_links.append(f"shop-btn: {btn[:100]}")
 
     def _analyze_fixtures_page(self, result: ScrapeResult, signals: _Signals):
         """Only look for 'Buy Tickets' or 'Book Now' links next to match entries."""
@@ -112,7 +144,7 @@ class TicketDetector:
                 signals.fixtures_has_buy_links = True
                 signals.ticket_links.append(f"fixtures: {link['text'][:50]} ({link['href'][:80]})")
 
-    def _make_decision(self, signals: _Signals, ticket_page: ScrapeResult | None) -> DetectionResult:
+    def _make_decision(self, signals: _Signals, _primary_ticket_page: ScrapeResult | None) -> DetectionResult:
         unique_matches = list(dict.fromkeys(signals.match_keywords))
         new_matches = [m for m in unique_matches if m not in self._known_matches]
 

@@ -15,6 +15,7 @@ class ScrapeResult:
     url: str
     page_text: str
     links: list[dict] = field(default_factory=list)
+    buttons: list[str] = field(default_factory=list)
     screenshot_path: str = ""
     timestamp: datetime = field(default_factory=datetime.now)
     success: bool = True
@@ -71,6 +72,28 @@ class RCBScraper:
                 if href:
                     links.append({"href": href, "text": text})
 
+            button_labels: set[str] = set()
+            for sel in ("button", "[role='button']"):
+                try:
+                    for el in await page.query_selector_all(sel):
+                        try:
+                            parts = []
+                            t = (await el.inner_text()).strip()
+                            if t:
+                                parts.append(t)
+                            for attr in ("aria-label", "title", "value"):
+                                v = await el.get_attribute(attr)
+                                if v and v.strip():
+                                    parts.append(v.strip())
+                            label = " — ".join(dict.fromkeys(parts))
+                            if label:
+                                button_labels.add(label[:200])
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+            buttons = sorted(button_labels)
+
             screenshot_path = ""
             if take_screenshot:
                 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -82,6 +105,7 @@ class RCBScraper:
                 url=url,
                 page_text=page_text,
                 links=links,
+                buttons=buttons,
                 screenshot_path=screenshot_path,
             )
 
@@ -96,6 +120,7 @@ class RCBScraper:
         results = []
         for name, url in config.URLS.items():
             logger.info("Scraping [%s] %s", name, url)
-            result = await self.scrape_page(url, take_screenshot=(name == "ticket_page"))
+            take_shot = name in ("ticket_page", "tickets_page")
+            result = await self.scrape_page(url, take_screenshot=take_shot)
             results.append(result)
         return results
