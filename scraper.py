@@ -27,6 +27,7 @@ class RCBScraper:
     def __init__(self):
         self._playwright = None
         self._browser: Browser | None = None
+        self._context = None
 
     async def start(self):
         os.makedirs(config.SCREENSHOTS_DIR, exist_ok=True)
@@ -34,20 +35,7 @@ class RCBScraper:
         self._browser = await self._playwright.chromium.launch(
             headless=config.HEADLESS,
         )
-        logger.info("Browser launched (headless=%s)", config.HEADLESS)
-
-    async def stop(self):
-        if self._browser:
-            await self._browser.close()
-        if self._playwright:
-            await self._playwright.stop()
-        logger.info("Browser closed")
-
-    async def scrape_page(self, url: str, take_screenshot: bool = True) -> ScrapeResult:
-        if not self._browser:
-            raise RuntimeError("Browser not started. Call start() first.")
-
-        context = await self._browser.new_context(
+        self._context = await self._browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -55,14 +43,28 @@ class RCBScraper:
             ),
             viewport={"width": 1440, "height": 900},
         )
-        page: Page = await context.new_page()
+        logger.info("Browser launched (headless=%s), persistent context ready", config.HEADLESS)
+
+    async def stop(self):
+        if self._context:
+            await self._context.close()
+            self._context = None
+        if self._browser:
+            await self._browser.close()
+        if self._playwright:
+            await self._playwright.stop()
+        logger.info("Browser closed")
+
+    async def scrape_page(self, url: str, take_screenshot: bool = True) -> ScrapeResult:
+        if not self._context:
+            raise RuntimeError("Browser not started. Call start() first.")
+
+        page: Page = await self._context.new_page()
 
         try:
             logger.debug("Navigating to %s", url)
             await page.goto(url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until="load")
 
-            # networkidle is unreliable on SPA pages with persistent Razorpay/reCAPTCHA
-            # connections; use a short timeout and swallow failures.
             try:
                 await page.wait_for_load_state("networkidle", timeout=10_000)
             except Exception:
@@ -127,7 +129,7 @@ class RCBScraper:
             return ScrapeResult(url=url, page_text="", success=False, error=str(e))
 
         finally:
-            await context.close()
+            await page.close()
 
     @staticmethod
     async def _wait_for_body_content(page: Page, min_chars: int = 50, timeout_ms: int = 15000) -> str:
