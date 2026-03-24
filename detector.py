@@ -13,6 +13,12 @@ def _is_rcb_ticket_listing_url(url: str) -> bool:
     return path.endswith("/ticket") or path.endswith("/tickets")
 
 
+def _is_shop_ticket_tab_path(url: str) -> bool:
+    """True only for /ticket, not /tickets (str.endswith('/ticket') matches /tickets incorrectly)."""
+    seg = (urlparse(url).path or "").lower().strip("/").split("/")[-1:]
+    return bool(seg) and seg[0] == "ticket"
+
+
 def _is_shop_home_url(url: str) -> bool:
     return (
         url.rstrip("/") == config.URLS["shop_home"].rstrip("/")
@@ -53,6 +59,8 @@ class _Signals:
         self.ticket_page_baseline: int = 0
         self.ticket_page_grew: bool = False
         self.ticket_page_wait_copy: bool = False
+        self.ticket_tab_gate_ok: bool = False
+        self.ticket_tab_gate_reason: str = ""
         self.match_keywords: list[str] = []
         self.action_keywords: list[str] = []
         self.signal_keywords: list[str] = []
@@ -85,6 +93,11 @@ class TicketDetector:
 
         if fixtures_page:
             self._analyze_fixtures_page(fixtures_page, signals)
+
+        tab = self._result_for_shop_ticket_tab(results)
+        signals.ticket_tab_gate_ok, signals.ticket_tab_gate_reason = self._evaluate_ticket_tab_alert_gate(
+            tab
+        )
 
         primary = ticket_pages[0] if ticket_pages else None
         return self._make_decision(signals, primary)
@@ -161,34 +174,81 @@ class TicketDetector:
             signals.fixtures_has_buy_links = True
             signals.ticket_links.append(f"fixtures: {link['text'][:50]} ({link['href'][:80]})")
 
+    def _result_for_shop_ticket_tab(self, results: list[ScrapeResult]) -> ScrapeResult | None:
+        """Successful scrape for the /ticket URL (not /tickets)."""
+        want = config.URLS["ticket_page"].rstrip("/").lower()
+        for r in results:
+            if not r.success:
+                continue
+            if r.url.rstrip("/").lower() == want:
+                return r
+        for r in results:
+            if not r.success:
+                continue
+            host = (urlparse(r.url).netloc or "").lower()
+            if "shop.royalchallengers.com" not in host:
+                continue
+            if _is_shop_ticket_tab_path(r.url):
+                return r
+        return None
+
+    def _evaluate_ticket_tab_alert_gate(self, tab: ScrapeResult | None) -> tuple[bool, str]:
+        """
+        Alerts only if https://shop.royalchallengers.com/ticket shows an opponent
+        or no longer shows the standard wait copy (with enough body text to trust that).
+        """
+        if tab is None:
+            return False, "no successful /ticket scrape"
+
+        text = tab.page_text.strip()
+        low = text.lower()
+        if self._find_match_keywords(low):
+            return True, "opponent named on /ticket"
+
+        if len(text) < config.TICKET_TAB_MIN_BODY_CHARS:
+            return False, f"/ticket body too short (<{config.TICKET_TAB_MIN_BODY_CHARS} chars)"
+
+        if _ticket_page_shows_wait_copy(low):
+            return False, "wait copy still on /ticket"
+
+        return True, "no wait copy on /ticket"
+
     def _make_decision(self, signals: _Signals, _primary_ticket_page: ScrapeResult | None) -> DetectionResult:
         unique_matches = list(dict.fromkeys(signals.match_keywords))
         new_matches = [m for m in unique_matches if m not in self._known_matches]
 
-        tickets_found = False
+        raw_tickets_found = False
         has_team_listing = bool(unique_matches)
         # Merch "Buy Now" and persistent nav stay on the wait-state page; do not treat as live tickets.
         wait_page_blocks_weak_signals = signals.ticket_page_wait_copy and not has_team_listing
 
         if has_team_listing:
-            tickets_found = True
+            raw_tickets_found = True
         elif not wait_page_blocks_weak_signals and signals.fixtures_has_buy_links:
-            tickets_found = True
+            raw_tickets_found = True
         elif not wait_page_blocks_weak_signals and signals.shop_has_ticket_nav:
-            tickets_found = True
+            raw_tickets_found = True
         elif not wait_page_blocks_weak_signals and signals.ticket_links:
-            tickets_found = True
+            raw_tickets_found = True
         elif (
             not wait_page_blocks_weak_signals
             and signals.ticket_page_grew
             and (signals.action_keywords or signals.signal_keywords)
         ):
-            tickets_found = True
+            raw_tickets_found = True
+
+        tickets_found = raw_tickets_found and signals.ticket_tab_gate_ok
 
         if tickets_found and new_matches:
             self._known_matches.update(new_matches)
 
-        summary = self._build_summary(tickets_found, new_matches, unique_matches, signals)
+        summary = self._build_summary(
+            tickets_found,
+            new_matches,
+            unique_matches,
+            signals,
+            raw_tickets_found=raw_tickets_found,
+        )
 
         return DetectionResult(
             tickets_found=tickets_found,
@@ -241,6 +301,8 @@ class TicketDetector:
         new_matches: list[str],
         all_matches: list[str],
         signals: _Signals,
+        *,
+        raw_tickets_found: bool = False,
     ) -> str:
         if not tickets_found:
             wait_note = (
@@ -248,10 +310,14 @@ class TicketDetector:
                 if signals.ticket_page_length or signals.ticket_page_wait_copy
                 else ""
             )
+            gate_note = ""
+            if raw_tickets_found and not signals.ticket_tab_gate_ok:
+                gate_note = f" Alert suppressed: {signals.ticket_tab_gate_reason}."
             return (
                 f"No tickets detected. "
                 f"Ticket page: {signals.ticket_page_length} chars "
                 f"(baseline: {signals.ticket_page_baseline}).{wait_note} "
+                f"/ticket gate: {signals.ticket_tab_gate_reason}.{gate_note} "
                 f"Shop nav ticket link: {signals.shop_has_ticket_nav}. "
                 f"Fixtures buy links: {signals.fixtures_has_buy_links}."
             )

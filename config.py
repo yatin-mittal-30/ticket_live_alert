@@ -86,6 +86,9 @@ TICKET_SIGNAL_KEYWORDS = [
     "rs.", "rs ", "inr", "/-",
 ]
 
+# /ticket tab must have at least this many chars before we trust "no wait copy" (avoid blank/SPA glitches).
+TICKET_TAB_MIN_BODY_CHARS = int(os.getenv("TICKET_TAB_MIN_BODY_CHARS", "80"))
+
 SCREENSHOTS_DIR = "screenshots"
 PAGE_LOAD_TIMEOUT_MS = 30_000
 MAX_RETRIES = 3
