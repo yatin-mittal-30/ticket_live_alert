@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -68,7 +69,13 @@ class RCBScraper:
                 pass
 
             page_text = await self._wait_for_body_content(page)
-            logger.debug("Page body: %d chars for %s", len(page_text), url)
+
+            if len(page_text.strip()) < 50:
+                raw_html = await page.content()
+                fallback = self._extract_text_from_html(raw_html)
+                if len(fallback.strip()) > len(page_text.strip()):
+                    logger.info("Using HTML fallback for %s (%d chars vs %d)", url, len(fallback.strip()), len(page_text.strip()))
+                    page_text = fallback
 
             link_elements = await page.query_selector_all("a")
             links = []
@@ -150,6 +157,16 @@ class RCBScraper:
             len((text or "").strip()), timeout_ms, page.url,
         )
         return text or ""
+
+    @staticmethod
+    def _extract_text_from_html(html: str) -> str:
+        """Crude tag-strip fallback when JS rendering fails."""
+        text = re.sub(r"<script[^>]*>[\s\S]*?</script>", " ", html, flags=re.IGNORECASE)
+        text = re.sub(r"<style[^>]*>[\s\S]*?</style>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"&[a-zA-Z]+;", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
 
     async def scrape_all(self) -> list[ScrapeResult]:
         results = []
