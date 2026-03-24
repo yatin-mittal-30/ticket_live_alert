@@ -74,10 +74,14 @@ TICKET_ACTION_KEYWORDS = [
     "book ticket", "get ticket", "buy ticket",
 ]
 
-# Shop page: button / visible text hints (lowercase) for ticket CTAs.
+# Shop page: button text hints (lowercase) for ticket CTAs.
+# DO NOT include bare "ticket"/"tickets" — the nav tab is always labelled that.
 SHOP_TICKET_BUTTON_HINTS = [
-    "ticket", "tickets", "buy ticket", "book ticket", "get ticket", "match tickets",
+    "buy ticket", "book ticket", "get ticket", "match ticket",
 ]
+
+# Nav buttons to IGNORE on shop pages (always present, not ticket CTAs).
+SHOP_NAV_IGNORE_BUTTONS = {"tickets", "merchandise", "more", "options"}
 
 TICKET_SIGNAL_KEYWORDS = [
     "chinnaswamy", "m. chinnaswamy", "stadium",

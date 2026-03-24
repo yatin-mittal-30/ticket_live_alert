@@ -151,7 +151,9 @@ class TicketDetector:
                 signals.ticket_links.append(f"shop-link: {link['text'][:40]} ({link['href'][:90]})")
 
         for btn in result.buttons:
-            low = btn.lower()
+            low = btn.lower().strip()
+            if low in config.SHOP_NAV_IGNORE_BUTTONS:
+                continue
             if not any(h in low for h in config.SHOP_TICKET_BUTTON_HINTS):
                 continue
             signals.shop_has_ticket_nav = True
@@ -323,6 +325,7 @@ class TicketDetector:
             )
 
         parts = ["TICKETS DETECTED!"]
+        parts.append(f"/ticket gate: {signals.ticket_tab_gate_reason}")
         if new_matches:
             parts.append(f"New matches: {', '.join(new_matches)}")
         if signals.ticket_page_grew:
