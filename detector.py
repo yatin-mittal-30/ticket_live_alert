@@ -40,6 +40,11 @@ LINK_FALSE_POSITIVES = [
 ]
 
 
+def _ticket_page_shows_wait_copy(text_lower: str) -> bool:
+    """True when the shop still shows the standard 'no tickets yet' messaging."""
+    return any(phrase in text_lower for phrase in config.TICKET_PAGE_WAIT_PHRASES)
+
+
 class _Signals:
     """Accumulates detection signals across all pages."""
 
@@ -47,6 +52,7 @@ class _Signals:
         self.ticket_page_length: int = 0
         self.ticket_page_baseline: int = 0
         self.ticket_page_grew: bool = False
+        self.ticket_page_wait_copy: bool = False
         self.match_keywords: list[str] = []
         self.action_keywords: list[str] = []
         self.signal_keywords: list[str] = []
@@ -105,6 +111,11 @@ class TicketDetector:
             signals.screenshot_path = shot.screenshot_path
         signals.url = config.PRIMARY_TICKET_SHOP_URL
 
+        combined_lower = "\n".join(
+            r.page_text.strip().lower() for r in pages if (r.page_text or "").strip()
+        )
+        signals.ticket_page_wait_copy = _ticket_page_shows_wait_copy(combined_lower)
+
         for result in pages:
             text_lower = result.page_text.strip().lower()
             signals.match_keywords.extend(self._find_match_keywords(text_lower))
@@ -149,16 +160,23 @@ class TicketDetector:
         new_matches = [m for m in unique_matches if m not in self._known_matches]
 
         tickets_found = False
+        has_team_listing = bool(unique_matches)
+        # Merch "Buy Now" and persistent nav stay on the wait-state page; do not treat as live tickets.
+        wait_page_blocks_weak_signals = signals.ticket_page_wait_copy and not has_team_listing
 
-        if signals.ticket_page_grew and signals.action_keywords:
+        if has_team_listing:
             tickets_found = True
-        elif signals.ticket_page_grew and signals.match_keywords:
-            tickets_found = True
-        elif signals.ticket_links:
+        elif signals.fixtures_has_buy_links:
             tickets_found = True
         elif signals.shop_has_ticket_nav:
             tickets_found = True
-        elif signals.fixtures_has_buy_links:
+        elif not wait_page_blocks_weak_signals and signals.ticket_links:
+            tickets_found = True
+        elif (
+            not wait_page_blocks_weak_signals
+            and signals.ticket_page_grew
+            and (signals.action_keywords or signals.signal_keywords)
+        ):
             tickets_found = True
 
         if tickets_found and new_matches:
@@ -219,10 +237,15 @@ class TicketDetector:
         signals: _Signals,
     ) -> str:
         if not tickets_found:
+            wait_note = (
+                f" Wait-state copy on ticket page: {signals.ticket_page_wait_copy}."
+                if signals.ticket_page_length or signals.ticket_page_wait_copy
+                else ""
+            )
             return (
                 f"No tickets detected. "
                 f"Ticket page: {signals.ticket_page_length} chars "
-                f"(baseline: {signals.ticket_page_baseline}). "
+                f"(baseline: {signals.ticket_page_baseline}).{wait_note} "
                 f"Shop nav ticket link: {signals.shop_has_ticket_nav}. "
                 f"Fixtures buy links: {signals.fixtures_has_buy_links}."
             )

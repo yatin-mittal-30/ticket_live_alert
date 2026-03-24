@@ -40,9 +40,25 @@ PRIMARY_TICKET_SHOP_URL = os.getenv(
     "https://shop.royalchallengers.com/tickets",
 )
 
+# Opponent labels searched on /ticket and /tickets (full name, abbreviation, or "RCB vs …" copy).
+# Add rows as fixtures are announced.
 TARGET_MATCHES = [
     {"opponent": "SRH", "full_name": "Sunrisers Hyderabad", "date": "March 28, 2026"},
     {"opponent": "CSK", "full_name": "Chennai Super Kings", "date": "April 5, 2026"},
+    {"opponent": "MI", "full_name": "Mumbai Indians", "date": ""},
+    {"opponent": "DC", "full_name": "Delhi Capitals", "date": ""},
+    {"opponent": "KKR", "full_name": "Kolkata Knight Riders", "date": ""},
+    {"opponent": "RR", "full_name": "Rajasthan Royals", "date": ""},
+    {"opponent": "LSG", "full_name": "Lucknow Super Giants", "date": ""},
+    {"opponent": "PBKS", "full_name": "Punjab Kings", "date": ""},
+    {"opponent": "GT", "full_name": "Gujarat Titans", "date": ""},
+]
+
+# When this copy is on the ticket shop page and no opponent is found, ignore weak signals
+# (e.g. merch "Buy Now", nav) so we only alert when listings/teams actually appear.
+TICKET_PAGE_WAIT_PHRASES = [
+    "tickets not available",
+    "await further announcements",
 ]
 
 MATCH_KEYWORDS = [
