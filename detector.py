@@ -145,15 +145,21 @@ class TicketDetector:
             signals.ticket_links.append(f"shop-btn: {btn[:100]}")
 
     def _analyze_fixtures_page(self, result: ScrapeResult, signals: _Signals):
-        """Only look for 'Buy Tickets' or 'Book Now' links next to match entries."""
+        """Match fixture CTAs that clearly refer to tickets (not generic merch 'Buy now')."""
+        ticket_cta_in_text = ("buy ticket", "book ticket", "get ticket")
+        loose_cta_in_text = ("book now", "buy now")
         for link in result.links:
             href = link["href"].lower()
             text = link["text"].lower().strip()
             if self._is_false_positive_link(href):
                 continue
-            if any(kw in text for kw in ["buy ticket", "book ticket", "get ticket", "buy now"]):
-                signals.fixtures_has_buy_links = True
-                signals.ticket_links.append(f"fixtures: {link['text'][:50]} ({link['href'][:80]})")
+            has_explicit_ticket = any(kw in text for kw in ticket_cta_in_text)
+            has_loose_cta = any(kw in text for kw in loose_cta_in_text)
+            href_suggests_tickets = "ticket" in href
+            if not has_explicit_ticket and not (has_loose_cta and href_suggests_tickets):
+                continue
+            signals.fixtures_has_buy_links = True
+            signals.ticket_links.append(f"fixtures: {link['text'][:50]} ({link['href'][:80]})")
 
     def _make_decision(self, signals: _Signals, _primary_ticket_page: ScrapeResult | None) -> DetectionResult:
         unique_matches = list(dict.fromkeys(signals.match_keywords))
@@ -166,9 +172,9 @@ class TicketDetector:
 
         if has_team_listing:
             tickets_found = True
-        elif signals.fixtures_has_buy_links:
+        elif not wait_page_blocks_weak_signals and signals.fixtures_has_buy_links:
             tickets_found = True
-        elif signals.shop_has_ticket_nav:
+        elif not wait_page_blocks_weak_signals and signals.shop_has_ticket_nav:
             tickets_found = True
         elif not wait_page_blocks_weak_signals and signals.ticket_links:
             tickets_found = True

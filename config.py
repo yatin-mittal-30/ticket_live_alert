@@ -58,7 +58,9 @@ TARGET_MATCHES = [
 # (e.g. merch "Buy Now", nav) so we only alert when listings/teams actually appear.
 TICKET_PAGE_WAIT_PHRASES = [
     "tickets not available",
+    "ticket not available",
     "await further announcements",
+    "await further announcement",
 ]
 
 MATCH_KEYWORDS = [
