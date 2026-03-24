@@ -58,11 +58,17 @@ class RCBScraper:
 
         try:
             logger.debug("Navigating to %s", url)
-            await page.goto(url, timeout=config.PAGE_LOAD_TIMEOUT_MS)
-            await page.wait_for_load_state("networkidle", timeout=config.PAGE_LOAD_TIMEOUT_MS)
-            await page.wait_for_timeout(3000)
+            await page.goto(url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until="load")
 
-            page_text = await page.inner_text("body")
+            # networkidle is unreliable on SPA pages with persistent Razorpay/reCAPTCHA
+            # connections; use a short timeout and swallow failures.
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10_000)
+            except Exception:
+                pass
+
+            page_text = await self._wait_for_body_content(page)
+            logger.debug("Page body: %d chars for %s", len(page_text), url)
 
             link_elements = await page.query_selector_all("a")
             links = []
@@ -115,6 +121,35 @@ class RCBScraper:
 
         finally:
             await context.close()
+
+    @staticmethod
+    async def _wait_for_body_content(page: Page, min_chars: int = 50, timeout_ms: int = 15000) -> str:
+        """Poll body text until the SPA has rendered meaningful content."""
+        interval = 1000
+        waited = 0
+        text = ""
+        while waited < timeout_ms:
+            try:
+                text = await page.evaluate(
+                    "(min) => {"
+                    "  const shop = document.querySelector('#rcb-shop');"
+                    "  if (shop && shop.innerText.trim().length >= min) return shop.innerText;"
+                    "  const body = document.body;"
+                    "  return body ? body.innerText : '';"
+                    "}",
+                    min_chars,
+                )
+            except Exception:
+                text = ""
+            if len((text or "").strip()) >= min_chars:
+                return text
+            await page.wait_for_timeout(interval)
+            waited += interval
+        logger.warning(
+            "Body still short (%d chars) after %dms on %s",
+            len((text or "").strip()), timeout_ms, page.url,
+        )
+        return text or ""
 
     async def scrape_all(self) -> list[ScrapeResult]:
         results = []
